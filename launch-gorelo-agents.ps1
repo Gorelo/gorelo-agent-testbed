@@ -4,7 +4,7 @@ Import-Module -Name AWS.Tools.S3
 #userdata script
 $userdatascript = "<powershell>
 (new-object net.webclient).DownloadFile('https://gorelo-public.s3-us-west-2.amazonaws.com/{agent}','c:\{agent}')
-msiexec.exe /i 'C:\gorelo-agent.msi' /qn
+msiexec.exe /i 'C:\{agent}' /qn
 </powershell>"
 $agentfile = ""
 $agentfilepath = ""
@@ -33,7 +33,7 @@ function start-instance {
         $launchspecs = New-Object -TypeName Amazon.EC2.Model.LaunchTemplateSpecification
         $launchspecs.LaunchTemplateId = $template
         $reservation = New-Ec2Instance -LaunchTemplate $launchspecs -UserData $encodeduserscript -ProfileName gorelo  
-        Write-Host "Started instance with reservation : " $reservation.ReservationId
+        Write-Host "Started instance with reservation: " $reservation.ReservationId
         
         #Get Instance details
         $live = $false
@@ -43,7 +43,7 @@ function start-instance {
             if($instances.Count -gt 0 -and $instances[0].State.Name -eq "running")
             {
                 Write-Host $instances[0].PublicDnsName $instances[0].InstanceId
-                $instances[0] | Select-Object -Property LaunchTime,InstanceId,PublicDnsName,State.Name | Export-Csv -Path $instancelog -NoTypeInformation -Append
+                $instances[0] | Select-Object -Property LaunchTime,InstanceId,PublicDnsName | Export-Csv -Path $instancelog -NoTypeInformation -Append
                 $live = $true
             }
             else
@@ -74,7 +74,7 @@ function stop-instance(){
     #show list of instances to help select instance
     $runningInstances = Import-Csv $instancelog
     $runningInstances | Format-Table
-    $instanceid = Read-Host -Prompt "Please provide Instanceid from the list above or type all."
+    $instanceid = Read-Host -Prompt "Please provide Instanceid from the list above or type all"
 
     #stop instance
     try {
@@ -82,12 +82,17 @@ function stop-instance(){
         {
             foreach($instance in $runningInstances)
             {
-                
+                Write-Host "Stopping $instance"
                 Remove-EC2Instance -InstanceId $instance -ProfileName gorelo
+                $remaininginstances = import-csv $instancelog | Where-Object InstanceId -ne $instance
+                $remaininginstances | export-csv $instancelog -NoTypeInformation
             }
         }
         else {
+            Write-Host "Stopping $instanceid"
             Remove-EC2Instance -InstanceId $instanceid -ProfileName gorelo
+            $remaininginstances = import-csv $instancelog | Where-Object InstanceId -ne $instanceid
+            $remaininginstances | export-csv $instancelog -NoTypeInformation
         }
     }
     catch {
