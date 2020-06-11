@@ -1,14 +1,24 @@
-﻿Import-Module -Name AWS.Tools.EC2
+﻿#params
+param (
+    [Parameter(Mandatory=$true, HelpMessage="Please provide an action")][string] $action,
+    [string] $Profile = "default",
+    [Parameter(HelpMessage="The OS must be win7, win10 or win2012")] [ValidateSet("win7", "win10", "win2012")] [string]  $OS,
+    [string] $MsiFileName,
+    [switch] $Upload = $false
+)
+
+Import-Module -Name AWS.Tools.EC2
 Import-Module -Name AWS.Tools.S3
+
+
 
 #userdata script
 $userdatascript = "<powershell>
 (new-object net.webclient).DownloadFile('https://gorelo-public.s3-us-west-2.amazonaws.com/{agent}','c:\{agent}')
 msiexec.exe /i 'C:\{agent}' /qn
 </powershell>"
-$agentfile = ""
-$agentfilepath = ""
-$upload = $false
+
+$agentfilepath = "$PSScriptRoot\$MsiFileName"
 $instancelog = "$PSScriptRoot\instance.csv"
 
 #list templates
@@ -25,21 +35,21 @@ function start-instance {
         #upload file
         if($upload)
         {
-            Write-Host "Uploading agent file $agentfile"
-            Write-S3Object -BucketName gorelo-public -File $agentfilepath -Key $agentfile -CannedACLName public-read -ProfileName gorelo
+            Write-Host "Uploading agent file $MsiFileName"
+            Write-S3Object -BucketName gorelo-public -File $agentfilepath -Key $MsiFileName -CannedACLName public-read -ProfileName $Profile
         }
 
         #launch instance
         $launchspecs = New-Object -TypeName Amazon.EC2.Model.LaunchTemplateSpecification
         $launchspecs.LaunchTemplateId = $template
-        $reservation = New-Ec2Instance -LaunchTemplate $launchspecs -UserData $encodeduserscript -ProfileName gorelo  
+        $reservation = New-Ec2Instance -LaunchTemplate $launchspecs -UserData $encodeduserscript -ProfileName $Profile  
         Write-Host "Started instance with reservation: " $reservation.ReservationId
         
         #Get Instance details
         $live = $false
         while(!$live)
         {
-            $instances = (Get-EC2Instance -Filter @{Name = "reservation-id"; Values = $reservation.ReservationId} -ProfileName gorelo).Instances
+            $instances = (Get-EC2Instance -Filter @{Name = "reservation-id"; Values = $reservation.ReservationId} -ProfileName $Profile).Instances
             if($instances.Count -gt 0 -and $instances[0].State.Name -eq "running")
             {
                 Write-Host $instances[0].PublicDnsName $instances[0].InstanceId
@@ -83,14 +93,14 @@ function stop-instance(){
             foreach($instance in $runningInstances)
             {
                 Write-Host "Stopping $instance"
-                Remove-EC2Instance -InstanceId $instance -ProfileName gorelo
+                Remove-EC2Instance -InstanceId $instance -ProfileName $Profile
                 $remaininginstances = import-csv $instancelog | Where-Object InstanceId -ne $instance
                 $remaininginstances | export-csv $instancelog -NoTypeInformation
             }
         }
         else {
             Write-Host "Stopping $instanceid"
-            Remove-EC2Instance -InstanceId $instanceid -ProfileName gorelo
+            Remove-EC2Instance -InstanceId $instanceid -ProfileName $Profile
             $remaininginstances = import-csv $instancelog | Where-Object InstanceId -ne $instanceid
             $remaininginstances | export-csv $instancelog -NoTypeInformation
         }
@@ -105,54 +115,31 @@ function stop-instance(){
     }
 }
 
-#Usage
-if($args.Count -eq 0)
-    {
-        Write-Host "Please provide an OS name (win10, win7, win2012) and an action (start, stop)."
-        Write-Host "If the action is start, please also provide the url for the MSI package."
-        Write-Host "Example> start win7 https://mybucket.s3-us-west-2.amazonaws.com/my-location.msi"
-        break
-    }
-
-
-#Actions (start or stop)
-$action = $args[0]
-switch($action)
+if($action -eq "stop")
 {
-    "start" {}
-    "stop" { stop-instance 
-            return        
-            }
-    default {Write-Host "Please provide an action to perform. (start or stop)"}
+    stop-instance
+    break
+    
 }
 
 #Make sure that if the action is start, that a msi package is provided.
-if($action -eq "start" -and $null -eq $args[2])
+if($action -eq "start" -and $MsiFileName -eq "")
 {
-    Write-Host "Please provide a url for the msi package for this action and os"
+    Write-Host "Please provide a file name for the msi package. This will be used to bootstrap the agent."
     break
 }
 else
 {
-    $agentfile = $args[2]
-    $agentfilepath = "$PSScriptRoot\$agentfile" 
-    if(!(Test-Path $agentfilepath))
+    if($upload -and !(Test-Path $agentfilepath))
     {
         Write-Host "The filename $agentfilepath does not exist."
         return
     }
-    $userdatascript = $userdatascript.Replace("{agent}", $agentfile)
+    $userdatascript = $userdatascript.Replace("{agent}", $MsiFileName)
     
-    if($null -ne $args[3] -and $args[3] -eq "upload")
-    {
-        $upload = $true
-    }
 }
 
-
-#OS Selection
-$osSelection = $args[1]
-switch($osSelection)
+switch($OS)
 {
     "win7" { start-instance($win7_template, $win7_template_version) }
     "win10" { start-instance($win10_template, $win10_template_version) }
