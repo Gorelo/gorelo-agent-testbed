@@ -85,6 +85,11 @@ function stop-instance(){
     $runningInstances = Import-Csv $instancelog
     $runningInstances | Format-Table
     $instanceid = Read-Host -Prompt "Please provide Instanceid from the list above or type all"
+    if($instanceid -eq "")
+    {
+        Write-Host "Need an instanceid to stop."
+        return       
+    }
 
     #stop instance
     try {
