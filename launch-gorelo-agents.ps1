@@ -2,7 +2,7 @@
 param (
     [Parameter(Mandatory=$true, HelpMessage="Please provide an action")][string] $action,
     [string] $Profile = "default",
-    [Parameter(HelpMessage="The OS must be win7, win10 or win2012")] [ValidateSet("win7", "win10", "win2012")] [string]  $OS,
+    [Parameter(HelpMessage="The OS must be win7, win10 or win2012")] [ValidateSet("win7", "win10", "win2012", "win2019")] [string]  $OS,
     [string] $MsiFileName,
     [switch] $Upload = $false
 )
@@ -21,10 +21,13 @@ msiexec.exe /i 'C:\{agent}' /qn
 $agentfilepath = "$PSScriptRoot\$MsiFileName"
 $instancelog = "$PSScriptRoot\instance.csv"
 
-#list templates
-$win10_template = "lt-07c3e2842f9b3420e"
-$win2012_template = ""
-$win7_template = "lt-0f574698849eca2f1"
+#template table
+$launchTemplates = @{
+    win10 = "lt-07c3e2842f9b3420e"
+    win2012 = "lt-0d43678de0acf83c5"
+    win2019 = "lt-03a39a8acbebfd81f"
+    win7 = "lt-0f574698849eca2f1"
+}
 
 #starts instances with the template.
 function start-instance {
@@ -144,13 +147,14 @@ else
     
 }
 
-switch($OS)
+if($null -eq $launchTemplates[$os] )
 {
-    "win7" { start-instance($win7_template, $win7_template_version) }
-    "win10" { start-instance($win10_template, $win10_template_version) }
-    "win2012" { start-instance($win2012_template, $win2012_template_version) }
-    "all" {}
-    default {Write-Host "Please provide OS name or all"}
+    Write-Host "Please provide OS Name or all"
+    return
+}
+else {
+    start-instance($launchTemplates[$os])
+    return
 }
 
 
