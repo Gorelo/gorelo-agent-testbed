@@ -12,9 +12,13 @@ https://docs.aws.amazon.com/powershell/latest/userguide/pstools-getting-set-up-w
  .\launch-gorelo-agents.ps1 -action start -os win10 -MsiFileName gorelo-agent-shipondemand.msi -upload -Profile gorelo-rmm-test
 
 **Action:** start
+
 **OS:** can be win10, win7, win2012 (more configs to come).
+
 **MsiFileName:** This is the agent file you download form site.
+
 **Upload (optional):** Only pass this parameter if you want to upload the agent file. Otherwise the launcher assumes the file is already in S3.
+
 **Profile (optional):** Set this if you create a named profile when configuring aws cli. Otherwise it will just use the default.
 
 This will launch the instance and provide you with a dns name you can connect over rdp. It will also install the agent you provided. If all goes well, you will see the system in the devices section!
