@@ -1,8 +1,8 @@
 ﻿#params
 param (
     [Parameter(Mandatory=$true, HelpMessage="Please provide an action")][string] $action,
-    [string] $Profile = "default",
-    [Parameter(HelpMessage="The OS must be win7, win10 or win2012")] [ValidateSet("win7", "win10", "win2012", "win2019")] [string]  $OS,
+    [string] $AwsProfile = "default",
+    [Parameter(HelpMessage="The OS must be win7, win10, win2012 or win2019")] [ValidateSet("win7", "win10", "win2012", "win2019")] [string]  $OS,
     [string] $MsiFileName,
     [switch] $Upload = $false
 )
@@ -13,9 +13,13 @@ Import-Module -Name AWS.Tools.S3
 
 
 #userdata script
+$newPass = [System.Web.Security.Membership]::GeneratePassword(16, 4)
+
 $userdatascript = "<powershell>
 (new-object net.webclient).DownloadFile('https://gorelo-public.s3-us-west-2.amazonaws.com/{agent}','c:\{agent}')
 msiexec.exe /i 'C:\{agent}' /qn
+New-LocalUser devtest -Password (ConvertTo-SecureString -AsPlainText '$newPass' -Force) -FullName 'Dev Test User'
+Add-LocalGroupMember -Group 'Administrators' -Member 'devtest'
 </powershell>"
 
 $agentfilepath = "$PSScriptRoot\$MsiFileName"
@@ -39,20 +43,20 @@ function start-instance {
         if($upload)
         {
             Write-Host "Uploading agent file $MsiFileName"
-            Write-S3Object -BucketName gorelo-public -File $agentfilepath -Key $MsiFileName -CannedACLName public-read -ProfileName $Profile
+            Write-S3Object -BucketName gorelo-public -File $agentfilepath -Key $MsiFileName -CannedACLName public-read -ProfileName $AwsProfile
         }
 
         #launch instance
         $launchspecs = New-Object -TypeName Amazon.EC2.Model.LaunchTemplateSpecification
         $launchspecs.LaunchTemplateId = $template
-        $reservation = New-Ec2Instance -LaunchTemplate $launchspecs -UserData $encodeduserscript -ProfileName $Profile  
-        Write-Host "Started instance with reservation: " $reservation.ReservationId
+        $reservation = New-Ec2Instance -LaunchTemplate $launchspecs -UserData $encodeduserscript -ProfileName $AwsProfile  
+        Write-Host "Started instance with reservation: " $reservation.ReservationId " and password " $newPass
         
         #Get Instance details
         $live = $false
         while(!$live)
         {
-            $instances = (Get-EC2Instance -Filter @{Name = "reservation-id"; Values = $reservation.ReservationId} -ProfileName $Profile).Instances
+            $instances = (Get-EC2Instance -Filter @{Name = "reservation-id"; Values = $reservation.ReservationId} -ProfileName $AwsProfile).Instances
             if($instances.Count -gt 0 -and $instances[0].State.Name -eq "running")
             {
                 Write-Host $instances[0].PublicDnsName $instances[0].InstanceId
@@ -101,14 +105,14 @@ function stop-instance(){
             foreach($instance in $runningInstances)
             {
                 Write-Host "Stopping $instance"
-                Remove-EC2Instance -InstanceId $instance -ProfileName $Profile
+                Remove-EC2Instance -InstanceId $instance -ProfileName $AwsProfile
                 $remaininginstances = import-csv $instancelog | Where-Object InstanceId -ne $instance
                 $remaininginstances | export-csv $instancelog -NoTypeInformation
             }
         }
         else {
             Write-Host "Stopping $instanceid"
-            Remove-EC2Instance -InstanceId $instanceid -ProfileName $Profile
+            Remove-EC2Instance -InstanceId $instanceid -ProfileName $AwsProfile
             $remaininginstances = import-csv $instancelog | Where-Object InstanceId -ne $instanceid
             $remaininginstances | export-csv $instancelog -NoTypeInformation
         }
