@@ -9,7 +9,7 @@ https://docs.aws.amazon.com/powershell/latest/userguide/pstools-getting-set-up-w
 
 
 **Launching instance:**
- .\launch-gorelo-agents.ps1 -action start -os win10 -MsiFileName gorelo-agent-shipondemand.msi -upload -Profile gorelo-rmm-test
+ .\launch-gorelo-agents.ps1 -action start -os win10 -MsiFileName gorelo-agent-shipondemand.msi -upload -AwsProfile gorelo-rmm-test
 
 **Action:** start
 **OS:** can be win10, win7, win2012 (more configs to come).
